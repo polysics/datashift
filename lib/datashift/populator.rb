@@ -4,7 +4,7 @@
 # License::   MIT
 #
 # Details::   The default Populator class for assigning data to models
-#             
+#
 #             Provides individual population methods on an AR model.
 #
 #             Enables users to assign values to AR object, without knowing much about that receiving object.
@@ -17,13 +17,13 @@ module DataShift
   Struct.new("Substitution", :pattern, :replacement)
 
   class Populator
-    
+
     include DataShift::Logging
 
     def self.insistent_method_list
       @insistent_method_list ||= [:to_s, :to_i, :to_f, :to_b]
     end
- 
+
     # When looking up an association, when no field provided, try each of these in turn till a match
     # i.e find_by_name, find_by_title, find_by_id
     def self.insistent_find_by_list
@@ -44,32 +44,32 @@ module DataShift
 
     attr_reader :current_value, :original_value_before_override
     attr_reader :current_col_type
-    
+
     attr_reader :current_attribute_hash
     attr_reader :current_method_detail
-    
-    def initialize   
+
+    def initialize
       @current_value = nil
       @current_method_detail = nil
       @original_value_before_override = nil
       @current_attribute_hash = {}
 
     end
-    
+
     # Convert DSL string forms into a hash
     # e.g
-    # 
+    #
     #  "{:name => 'autechre'}" =>   Hash['name'] = autechre'
     #  "{:cost_price => '13.45', :price => 23,  :sale_price => 4.23 }"
-    
+
     def self.string_to_hash( str )
       h = {}
-      str.gsub(/[{}:]/,'').split(', ').map do |e| 
+      str.gsub(/[{}:]/,'').split(', ').map do |e|
         k,v = e.split('=>')
-        
+
         k.strip!
         v.strip!
-        
+
         if( v.match(/['"]/) )
           h[k] = v.gsub(/["']/, '')
         elsif( v.match(/^\d+$|^\d*\.\d+$|^\.\d+$/) )
@@ -79,21 +79,21 @@ module DataShift
         end
         h
       end
-   
+
       h
     end
-    
+
     # Set member variables to hold details, value and optional attributes,
     # to be set on the 'value' once created
-    # 
+    #
     # Check supplied value, validate it, and if required :
     #   set to provided default value
-    #   prepend any provided prefixes 
+    #   prepend any provided prefixes
     #   add any provided postfixes
     def prepare_data(method_detail, value)
 
       raise NilDataSuppliedError.new("No method detail supplied for prepare_data") unless(method_detail)
-     
+
       begin
         @prepare_data_const_regexp ||= Regexp.new( Delimiters::attribute_list_start + ".*" + Delimiters::attribute_list_end)
 
@@ -103,22 +103,22 @@ module DataShift
           @current_value = value
         else
           @current_value = value.to_s
-          
+
           attribute_hash = @current_value.slice!(@prepare_data_const_regexp)
-          
-          if(attribute_hash)  
+
+          if(attribute_hash)
             #@current_value.chop!    # the slice seems to add an extra space/eol
             @current_attribute_hash = Populator::string_to_hash( attribute_hash )
             logger.info "Populator for #{@current_value} has attributes #{@current_attribute_hash.inspect}"
           end
         end
-      
+
         @current_attribute_hash ||= {}
-       
+
         @current_method_detail = method_detail
 
         @current_col_type = @current_method_detail.col_type
-      
+
         operator = method_detail.operator
 
         if(has_override?(operator))
@@ -146,7 +146,7 @@ module DataShift
         logger.error("populator stacktrace: #{e.backtrace.join('\\n')}")
         raise DataProcessingError.new("opulator failed to prepare data #{value} for operator #{method_detail.operator}")
       end
-      
+
       return @current_value, @current_attribute_hash
     end
 
@@ -154,21 +154,21 @@ module DataShift
 
     def prepare_and_assign(method_detail, record, value)
 
-      prepare_data(method_detail, value) 
-       
+      prepare_data(method_detail, value)
+
       assign(record)
     end
-    
+
     def assign(record)
 
       raise NilDataSuppliedError.new("No method detail - cannot assign data") unless(current_method_detail)
-       
+
       operator = current_method_detail.operator
 
       logger.debug("Populator assign - [#{current_value}] via #{current_method_detail.operator} (#{current_method_detail.operator_type})")
-              
+
       if( current_method_detail.operator_for(:belongs_to) )
- 
+
         insistent_belongs_to(current_method_detail, record, current_value)
 
       elsif( current_method_detail.operator_for(:has_many) )
@@ -196,9 +196,9 @@ module DataShift
         end
 
       elsif( current_method_detail.operator_for(:assignment) && current_col_type)
-        logger.debug("Assign #{current_value} => [#{operator}] (CAST 2 TYPE  #{current_col_type.type_cast( current_value ).inspect})")
+        logger.debug("Assign #{current_value} => [#{operator}] (CAST 2 TYPE  #{current_col_type.type_cast_for_database( current_value ).inspect})")
 
-        record.send( operator + '=' , current_method_detail.col_type.type_cast( current_value ) )
+        record.send( operator + '=' , current_method_detail.col_type.type_cast_for_database( current_value ) )
 
       elsif( current_method_detail.operator_for(:assignment) )
         logger.debug("Brute force assignment of value  #{current_value} => [#{operator}]")
@@ -210,9 +210,9 @@ module DataShift
         logger.error("WARNING: No assignment possible on #{record.inspect} using [#{operator}]")
       end
     end
-    
+
     def insistent_assignment(record, value, operator)
-      
+
       op = operator + '=' unless(operator.include?('='))
 
       begin
@@ -233,7 +233,7 @@ module DataShift
         end
       end
     end
-    
+
     # Attempt to find the associated object via id, name, title ....
     def insistent_belongs_to(method_detail, record, value )
 
@@ -280,14 +280,14 @@ module DataShift
             end
           end
         end
-        
+
       end
     end
-    
+
     def assignment( operator, record, value )
 
       op = operator + '=' unless(operator.include?('='))
-    
+
       begin
         record.send(op, value)
       rescue => e
@@ -304,18 +304,18 @@ module DataShift
         end
       end
     end
-   
-    
+
+
     # Default values and over rides can be provided in Ruby/YAML ???? config file.
-    # 
+    #
     #  Format :
-    #     
+    #
     #    Load Class:    (e.g Spree:Product)
-    #     datashift_defaults:     
-    #       value_as_string: "Default Project Value"  
-    #       category: reference:category_002    
-    #     
-    #     datashift_overrides:    
+    #     datashift_defaults:
+    #       value_as_string: "Default Project Value"
+    #       category: reference:category_002
+    #
+    #     datashift_overrides:
     #       value_as_double: 99.23546
     #
     def configure_from(load_object_class, yaml_file)
@@ -323,16 +323,16 @@ module DataShift
       data = YAML::load( ERB.new( IO.read(yaml_file) ).result )
 
       # TODO - MOVE DEFAULTS TO OWN MODULE
-      
+
       logger.info("Setting Populator defaults: #{data.inspect}")
-      
+
       if(data[load_object_class.name])
 
         deflts = data[load_object_class.name]['datashift_defaults']
         default_values.merge!(deflts) if deflts
 
         logger.info("Set Populator default_values: #{default_values.inspect}")
-        
+
         ovrides = data[load_object_class.name]['datashift_overrides']
         override_values.merge!(ovrides) if ovrides
         logger.info("Set Populator overrides: #{override_values.inspect}")
@@ -375,15 +375,15 @@ module DataShift
     def set_override_value( operator, value )
       override_values[operator] = value
     end
-    
+
     def override_values
       @override_values ||= {}
     end
-    
+
     def override_value( operator )
       if(override_values[operator])
         @original_value_before_override = @current_value
-      
+
         @current_value = @override_values[operator]
       end
     end
@@ -398,11 +398,11 @@ module DataShift
     def set_default_value(operator, value )
       default_values[operator] = value
     end
-    
+
     def default_values
       @default_values ||= {}
     end
-    
+
     # Return the default value for supplied operator
     def default_value(operator)
       default_values[operator]
@@ -419,7 +419,7 @@ module DataShift
     def prefixes
       @prefixes ||= {}
     end
-    
+
     def set_postfix(operator, value )
       postfixes[operator] = value
     end
@@ -427,11 +427,11 @@ module DataShift
     def postfix(operator)
       postfixes[operator]
     end
-    
+
     def postfixes
       @postfixes ||= {}
     end
 
   end
-  
+
 end
